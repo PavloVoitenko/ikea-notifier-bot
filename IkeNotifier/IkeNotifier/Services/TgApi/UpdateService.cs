@@ -1,6 +1,4 @@
-﻿using System.Timers;
-using System.Threading;
-using System.Threading.Tasks;
+﻿using System.Threading.Tasks;
 using System;
 
 namespace IkeaNotifier.Services.TgApi;
@@ -8,24 +6,22 @@ namespace IkeaNotifier.Services.TgApi;
 public class UpdateService : IDisposable
 {
 	private readonly RequestService _requestService;
-	private readonly UpdateContainer _container;
-	private readonly ReplyHandlerService _replyHandler;
-	//private readonly UserRepository _userRepository;
+	private readonly UpdateContainerService _container;
+	private readonly MessageTypeService _messageTypeService;
+	private readonly UserEndpointService _userEndpointService;
 
 	private System.Timers.Timer _replyTimer;
-	private System.Timers.Timer _notificationTimer;
-
 
 	public UpdateService(
 		RequestService requestService,
-		//UpdateContainer container,
-		//UserRepository userRepository,
-		ReplyHandlerService replyHandler)
+		UpdateContainerService container,
+		MessageTypeService messageTypeService,
+		UserEndpointService userEndpointService)
 	{
 		_requestService = requestService;
-		//_container = container;
-		_replyHandler = replyHandler;
-		//_userRepository = userRepository;
+		_container = container;
+		_messageTypeService = messageTypeService;
+		_userEndpointService = userEndpointService;
 	}
 
 	public void StartUpdates()
@@ -38,72 +34,39 @@ public class UpdateService : IDisposable
 
 	private void SetTimers()
 	{
-		// Create a timer with a two second interval.
-		_replyTimer = new System.Timers.Timer(1000);
-		// Hook up the Elapsed event for the timer. 
-		_replyTimer.Elapsed += UpdateTimer;
-		_replyTimer.Elapsed += ReplyTimer;
-
-		_replyTimer.AutoReset = true;
-		_replyTimer.Enabled = true;
+		_replyTimer = new System.Timers.Timer(2000)
+		{
+			AutoReset = true,
+			Enabled = true
+		};
+		_replyTimer.Elapsed += async (_, _) => await SaveUpdates();
+		_replyTimer.Elapsed += async (_, _) => await ProceedReplies();
 	}
 
-	private async void UpdateTimer(object source, ElapsedEventArgs e) => await SaveUpdates(e);
-
-	private async void ReplyTimer(object source, ElapsedEventArgs e) => await ProceedReplies(e);
-
-	public async Task SaveUpdates(ElapsedEventArgs updateTime = null)
+	public async Task SaveUpdates()
 	{
-		var updates = await _requestService.GetUpdates(_container.GetLastUpdateId());
+		var updates = await _requestService.GetUpdates(await _container.GetLastUpdateId());
 
 		await _container.AddNewResults(updates);
 	}
 
-	private async Task ProceedReplies(ElapsedEventArgs e)
+	private async Task ProceedReplies()
 	{
-		var newMessages = _container.PullNewMessages();
-
-		foreach (var message in newMessages)
+		foreach (var message in _container.PullNewMessages())
 		{
-			var command = _replyHandler.ResolveMessage(message);
+			var command = _messageTypeService.ResolveMessage(message);
 
 			if (command == CommandType.None)
 			{
 				continue;
 			}
 
-			var currentUser = await _userRepository.GetUserAsync(message.UserTelegramId(), message.UserChatId());
-
-			if (currentUser == null)
-			{
-				currentUser = await _userRepository.CreateDefaultUser(
-					message.UserTelegramId(),
-					message.UserName(),
-					message.UserChatId());
-			}
-
 			switch (command)
 			{
-				case CommandType.GetStats:
-					await _requestService.ReplyText(message.UserChatId(), message.MessageId(), text: currentUser.Stats.ToString());
-					break;
-				case CommandType.GetWinrateRating:
-					await _requestService.ReplyText(message.UserChatId(), message.MessageId(), text: await _statsService.GetRating(currentUser));
-					break;
-				case CommandType.GetLengthRating:
-					await _requestService.ReplyText(message.UserChatId(), message.MessageId(), text: await _statsService.GetLengthRating(currentUser));
-					break;
-				case CommandType.UpdateStats:
-					var result = await _statsService.UpdateLength(currentUser);
+				case CommandType.SaveEndpoint:
+					var response = await _userEndpointService.AddUserEndpoint(message.UserId, message.UserName, message.ChatId, message.Message.Text);
 
-					await _requestService.ReplyText(message.UserChatId(), message.MessageId(), text: result);
-					break;
-				case CommandType.PerformFight:
-					await foreach (var fightResult in _fightingService.PerformRandomFight(currentUser))
-					{
-						System.Threading.Thread.Sleep(500);
-						await _requestService.SendText(message.UserChatId(), fightResult.ToString());
-					}
+					await _requestService.ReplyText(message.ChatId, message.MessageId, response);
 					break;
 			}
 		}
@@ -114,6 +77,5 @@ public class UpdateService : IDisposable
 		GC.SuppressFinalize(this);
 
 		_replyTimer?.Dispose();
-		_notificationTimer?.Dispose();
 	}
 }

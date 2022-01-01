@@ -1,50 +1,43 @@
-﻿
-using IkeaNotifier.Models.TgApi;
-using Microsoft.Extensions.Configuration;
+﻿using IkeaNotifier.Models.TgApi;
+using IkeaNotifier.Options;
+using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 using System.Net.Http;
 using System.Threading.Tasks;
-using System.Timers;
 
 namespace IkeaNotifier.Services.TgApi;
 
 public class RequestService
 {
-	private readonly HttpClient _client = new();
-	private string BotCode { get; set; }
-	private string ApiAddress { get; set; }
+	private readonly HttpClient _httpClient;
 
-	public RequestService(IConfiguration config)
+	private readonly string _botCode;
+	private readonly string _apiAddress;
+
+	public RequestService(IOptions<BotOptions> botOptions, HttpClient client)
 	{
-		ApiAddress = config["Api"];
-		BotCode = config["BotCode"];
+		var options = botOptions.Value;
+
+		_botCode = options.BotCode;
+		_apiAddress = options.Api;
+		_httpClient = client;
 	}
 
 	public async Task<UpdateModel> GetUpdates(long currentOffset)
 	{
-		var result = await _client.GetAsync(ApiAddress + BotCode + "/getUpdates?offset=" + currentOffset);
+		var result = await _httpClient.GetAsync(_apiAddress + _botCode + "/getUpdates?offset=" + currentOffset);
 		var content = await result.Content.ReadAsStringAsync();
 
 		return JsonConvert.DeserializeObject<UpdateModel>(content);
 	}
 
-	public async Task SendText(long chatId, string text = "", ElapsedEventArgs timerInfo = null)
+	public async Task SendText(long chatId, string text = "")
 	{
-		if (timerInfo != null)
-		{
-			text += string.Format(" at {0:HH:mm:ss}", timerInfo.SignalTime);
-		}
-
-		await _client.GetAsync(ApiAddress + BotCode + "/sendMessage" + "?chat_id=" + chatId + "&text=" + text);
+		await _httpClient.GetAsync(_apiAddress + _botCode + "/sendMessage?chat_id=" + chatId + "&text=" + text);
 	}
 
-	public async Task ReplyText(long chatId, int replyChatId, ElapsedEventArgs timerInfo = null, string text = "")
+	public async Task ReplyText(long chatId, int messageId, string text = "")
 	{
-		if (timerInfo != null)
-		{
-			text += string.Format(" at {0:HH:mm:ss}", timerInfo.SignalTime);
-		}
-
-		await _client.GetAsync($"{ApiAddress}{BotCode}/sendMessage?chat_id={chatId}&text={text}&reply_to_message_id={replyChatId}");
+		await _httpClient.GetAsync($"{_apiAddress}{_botCode}/sendMessage?chat_id={chatId}&text={text}&reply_to_message_id={messageId}");
 	}
 }

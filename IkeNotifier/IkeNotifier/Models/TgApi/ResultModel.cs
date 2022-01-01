@@ -9,4 +9,9 @@ public class ResultModel
 
 	[JsonProperty(PropertyName = "message")]
 	public MessageModel Message { get; set; }
+
+	public string UserName => Message.User.UserName;
+	public int UserId => Message.User.UserId;
+	public long ChatId => Message.Chat.ChatId;
+	public int MessageId => Message.MessageId;
 }

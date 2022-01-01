@@ -1,7 +1,9 @@
-﻿using System.Collections.Generic;
+﻿using MongoDB.Bson.Serialization.Attributes;
+using System.Collections.Generic;
 
 namespace IkeaNotifier.Models.Mongo;
 
+[BsonIgnoreExtraElements]
 public class UserDto
 {
 	public int UserId { get; set; }

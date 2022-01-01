@@ -47,8 +47,6 @@ public class UserRepository
 		return user;
 	}
 
-	#region Filters
-
 	private static FilterDefinition<UserDto> CreateUserChatFilter(int userId, long chatId)
 	{
 		var userFilter = CreateUserFilter(userId);
@@ -60,6 +58,4 @@ public class UserRepository
 	private static FilterDefinition<UserDto> CreateUserFilter(int userId) => Builders<UserDto>.Filter.Eq(u => u.UserId, userId);
 
 	private static FilterDefinition<UserDto> CreateChatFilter(long chatId) => Builders<UserDto>.Filter.Eq(u => u.ChatId, chatId);
-
-	#endregion
 }
